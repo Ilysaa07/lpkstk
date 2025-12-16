@@ -234,7 +234,7 @@ export default function SignersPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800">
                 <strong>URL Validasi:</strong><br />
-                {process.env.NEXT_PUBLIC_APP_URL}/verify/signature/{selectedSigner.id}
+                {process.env.NEXT_PUBLIC_APP_URL}/verifikasi/tanda-tangan/{selectedSigner.id}
               </p>
             </div>
 

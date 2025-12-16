@@ -133,7 +133,7 @@ export default function HomePage() {
             <span className="text-slate-300 text-sm">Sistem Terenkripsi & Aman</span>
           </div>
           <p className="text-slate-400 text-sm">
-            © 2024 Lembaga Sertifikasi & Validasi Tenaga Kerja. All rights reserved.
+            © 2025 Lembaga Sertifikasi & Validasi Tenaga Kerja. All rights reserved.
           </p>
         </div>
       </div>

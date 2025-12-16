@@ -7,7 +7,7 @@ import QRCode from 'qrcode'
  */
 export async function generateCertificateQR(certificateId: string): Promise<string> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const url = `${appUrl}/verify/certificate/${certificateId}`
+  const url = `${appUrl}/verifikasi/sertifikat/${certificateId}`
   
   return await QRCode.toDataURL(url, {
     errorCorrectionLevel: 'H',
@@ -24,7 +24,7 @@ export async function generateCertificateQR(certificateId: string): Promise<stri
  */
 export async function generateSignatureQR(signerId: string): Promise<string> {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const url = `${appUrl}/verify/signature/${signerId}`
+  const url = `${appUrl}/verifikasi/tanda-tangan/${signerId}`
   
   return await QRCode.toDataURL(url, {
     errorCorrectionLevel: 'H',
