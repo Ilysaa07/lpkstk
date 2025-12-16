@@ -23,6 +23,8 @@ export default function SignersPage() {
   const [selectedSigner, setSelectedSigner] = useState<Signer | null>(null)
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadSigners()
@@ -44,13 +46,22 @@ export default function SignersPage() {
     setSubmitting(true)
 
     try {
-      await createSigner(formData)
+      if (editMode && editingId) {
+        // Update existing signer
+        await updateSigner(editingId, formData)
+      } else {
+        // Create new signer
+        await createSigner(formData)
+      }
+      
       setFormData({ nama_lengkap: '', no_kegiatan: '' })
       setShowForm(false)
+      setEditMode(false)
+      setEditingId(null)
       await loadSigners()
     } catch (error) {
-      console.error('Error creating signer:', error)
-      alert('Gagal membuat penandatangan')
+      console.error('Error saving signer:', error)
+      alert(editMode ? 'Gagal mengupdate penandatangan' : 'Gagal membuat penandatangan')
     } finally {
       setSubmitting(false)
     }
@@ -64,6 +75,16 @@ export default function SignersPage() {
     } catch (error) {
       console.error('Error updating status:', error)
     }
+  }
+
+  const handleEdit = (signer: Signer) => {
+    setFormData({
+      nama_lengkap: signer.nama_lengkap,
+      no_kegiatan: signer.no_kegiatan,
+    })
+    setEditMode(true)
+    setEditingId(signer.id)
+    setShowForm(true)
   }
 
   const showQR = async (signer: Signer) => {
@@ -112,7 +133,9 @@ export default function SignersPage() {
       {/* Add Form */}
       {showForm && (
         <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800 mb-4">Tambah Penandatangan Baru</h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-4">
+            {editMode ? 'Edit Penandatangan' : 'Tambah Penandatangan Baru'}
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -143,7 +166,12 @@ export default function SignersPage() {
             <div className="flex justify-end space-x-3">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={() => {
+                  setShowForm(false)
+                  setEditMode(false)
+                  setEditingId(null)
+                  setFormData({ nama_lengkap: '', no_kegiatan: '' })
+                }}
                 className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all"
               >
                 Batal
@@ -153,7 +181,7 @@ export default function SignersPage() {
                 disabled={submitting}
                 className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:from-emerald-600 hover:to-cyan-600 transition-all disabled:opacity-50"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan'}
+                {submitting ? (editMode ? 'Mengupdate...' : 'Menyimpan...') : (editMode ? 'Update' : 'Simpan')}
               </button>
             </div>
           </form>
@@ -184,6 +212,12 @@ export default function SignersPage() {
             </div>
 
             <div className="flex space-x-2 mt-4">
+              <button
+                onClick={() => handleEdit(signer)}
+                className="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-all"
+              >
+                ✏️ Edit
+              </button>
               <button
                 onClick={() => showQR(signer)}
                 className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg text-sm font-medium transition-all"

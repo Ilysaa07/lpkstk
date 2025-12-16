@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getCertificates, createCertificate, updateCertificate } from '@/lib/actions/supabase-actions'
-import { generateCertificateQR } from '@/lib/utils/qr-generator'
+import { getCertificates, createCertificate, updateCertificate, createSigner } from '@/lib/actions/supabase-actions'
+import { generateCertificateQR, generateSignatureQR } from '@/lib/utils/qr-generator'
 import { DEFAULT_COMPETENCY_UNITS } from '@/lib/data/default-competency-units'
 
 interface CompetencyUnit {
@@ -30,6 +30,9 @@ export default function CertificatesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null)
   const [qrCode, setQrCode] = useState<string | null>(null)
+  const [qrSignature, setQrSignature] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     no_sertifikat: '',
@@ -58,12 +61,26 @@ export default function CertificatesPage() {
     setSubmitting(true)
 
     try {
-      await createCertificate({
-        ...formData,
-        pdf_url: '',
-        signer_id: '',
-        competency_units: DEFAULT_COMPETENCY_UNITS,
-      })
+      if (editMode && editingId) {
+        // Update existing certificate (don't touch signer)
+        await updateCertificate(editingId, formData)
+      } else {
+        // Create new certificate with auto-generated signer
+        // 1. First, create the signer
+        const signerData = await createSigner({
+          nama_lengkap: 'Ir. Rahardjo, MT',
+          no_kegiatan: formData.no_sertifikat,
+        })
+        
+        // 2. Then create certificate with the signer_id
+        await createCertificate({
+          ...formData,
+          pdf_url: '',
+          signer_id: signerData.id,
+          competency_units: DEFAULT_COMPETENCY_UNITS,
+        })
+      }
+      
       setFormData({
         no_sertifikat: '',
         nama_peserta: '',
@@ -71,10 +88,12 @@ export default function CertificatesPage() {
         tanggal_ditetapkan: '',
       })
       setShowForm(false)
+      setEditMode(false)
+      setEditingId(null)
       await loadData()
     } catch (error) {
-      console.error('Error creating certificate:', error)
-      alert('Gagal membuat sertifikat. Pastikan nomor sertifikat unik.')
+      console.error('Error saving certificate:', error)
+      alert(editMode ? 'Gagal mengupdate sertifikat' : 'Gagal membuat sertifikat. Pastikan nomor sertifikat unik.')
     } finally {
       setSubmitting(false)
     }
@@ -90,13 +109,56 @@ export default function CertificatesPage() {
     }
   }
 
+  const handleEdit = (cert: Certificate) => {
+    setFormData({
+      no_sertifikat: cert.no_sertifikat,
+      nama_peserta: cert.nama_peserta,
+      nama_kegiatan: cert.nama_kegiatan,
+      tanggal_ditetapkan: cert.tanggal_ditetapkan || '',
+    })
+    setEditMode(true)
+    setEditingId(cert.id)
+    setShowForm(true)
+  }
+
   const showQR = async (cert: Certificate) => {
     try {
-      const qr = await generateCertificateQR(cert.id)
-      setQrCode(qr)
+      // Generate certificate QR
+      const certQR = await generateCertificateQR(cert.id)
+      setQrCode(certQR)
+      
+      // Get full certificate data with signer_id
+      const certificates = await getCertificates()
+      const fullCert = certificates.find(c => c.id === cert.id)
+      
+      let signerId = fullCert?.signer_id
+      
+      // If certificate doesn't have a signer, create one
+      if (!signerId) {
+        console.log('Creating signer for existing certificate...')
+        const signerData = await createSigner({
+          nama_lengkap: 'Ir. Rahardjo, MT',
+          no_kegiatan: cert.no_sertifikat,
+        })
+        
+        // Update certificate with new signer_id
+        await updateCertificate(cert.id, { signer_id: signerData.id })
+        signerId = signerData.id
+        
+        // Reload data to refresh the list
+        await loadData()
+      }
+      
+      // Generate signature QR
+      if (signerId) {
+        const sigQR = await generateSignatureQR(signerId)
+        setQrSignature(sigQR)
+      }
+      
       setSelectedCert(cert)
     } catch (error) {
       console.error('Error generating QR:', error)
+      alert('Gagal generate QR code. Silakan coba lagi.')
     }
   }
 
@@ -139,7 +201,9 @@ export default function CertificatesPage() {
       {showForm && (
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-slate-800">Tambah Sertifikat Baru</h2>
+            <h2 className="text-xl font-bold text-slate-800">
+              {editMode ? 'Edit Sertifikat' : 'Tambah Sertifikat Baru'}
+            </h2>
           </div>
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -209,6 +273,8 @@ export default function CertificatesPage() {
                 type="button"
                 onClick={() => {
                   setShowForm(false)
+                  setEditMode(false)
+                  setEditingId(null)
                   setFormData({
                     no_sertifikat: '',
                     nama_peserta: '',
@@ -225,7 +291,7 @@ export default function CertificatesPage() {
                 disabled={submitting}
                 className="px-6 py-2 bg-gradient-to-r from-[#047fa7] to-[#0694c4] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan & Generate QR'}
+                {submitting ? (editMode ? 'Mengupdate...' : 'Menyimpan...') : (editMode ? 'Update Sertifikat' : 'Simpan & Generate QR')}
               </button>
             </div>
           </form>
@@ -275,6 +341,15 @@ export default function CertificatesPage() {
                   <td className="px-6 py-4">
                     <div className="flex justify-center space-x-2">
                       <button
+                        onClick={() => handleEdit(cert)}
+                        className="p-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all"
+                        title="Edit Sertifikat"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
                         onClick={() => showQR(cert)}
                         className="p-2 bg-[#047fa7] hover:bg-[#036589] text-white rounded-lg transition-all"
                         title="Lihat QR Code"
@@ -319,47 +394,99 @@ export default function CertificatesPage() {
         )}
       </div>
 
-      {/* QR Code Modal */}
+      {/* Dual QR Code Modal */}
       {qrCode && selectedCert && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => { setQrCode(null); setSelectedCert(null); }}
+          onClick={() => { setQrCode(null); setQrSignature(null); setSelectedCert(null); }}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-gradient-to-r from-[#047fa7] to-[#0694c4] px-6 py-4">
-              <h3 className="text-2xl font-bold text-white">QR Code Sertifikat</h3>
+              <h3 className="text-2xl font-bold text-white">Dual QR Code Sertifikat</h3>
               <p className="text-white/80 mt-1">
                 No: <span className="font-mono font-bold">{selectedCert.no_sertifikat}</span>
               </p>
             </div>
             
-            <div className="p-8">
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-xl mb-6 border-2 border-[#047fa7]/20">
-                <img src={qrCode} alt="QR Code" className="w-full h-auto" />
+            <div className="p-6 sm:p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* QR Certificate */}
+                <div>
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 rounded-xl mb-4 border-2 border-emerald-300">
+                    <img src={qrCode} alt="QR Certificate" className="w-full h-auto" />
+                  </div>
+                  <div className="text-center mb-3">
+                    <h4 className="font-bold text-slate-800 mb-1">📜 QR Sertifikat</h4>
+                    <p className="text-xs text-slate-600">Validasi data sertifikat</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const link = document.createElement('a')
+                      link.download = `qr-certificate-${selectedCert.no_sertifikat}.png`
+                      link.href = qrCode
+                      link.click()
+                    }}
+                    className="w-full px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all text-sm"
+                  >
+                    💾 Download QR Sertifikat
+                  </button>
+                </div>
+
+                {/* QR Signature */}
+                <div>
+                  {qrSignature ? (
+                    <>
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 p-4 rounded-xl mb-4 border-2 border-blue-300">
+                        <img src={qrSignature} alt="QR Signature" className="w-full h-auto" />
+                      </div>
+                      <div className="text-center mb-3">
+                        <h4 className="font-bold text-slate-800 mb-1">✍️ QR Tanda Tangan</h4>
+                        <p className="text-xs text-slate-600">Validasi penandatangan</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const link = document.createElement('a')
+                          link.download = `qr-signature-${selectedCert.no_sertifikat}.png`
+                          link.href = qrSignature
+                          link.click()
+                        }}
+                        className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all text-sm"
+                      >
+                        💾 Download QR Tanda Tangan
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center h-full bg-slate-50 rounded-xl border-2 border-dashed border-slate-300">
+                      <p className="text-slate-500 text-sm">QR Signature tidak tersedia</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>URL Validasi:</strong><br />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-800 mb-2">
+                  <strong>📍 URL Validasi Sertifikat:</strong><br />
                   <span className="font-mono text-xs break-all">
                     {process.env.NEXT_PUBLIC_APP_URL}/verifikasi/sertifikat/{selectedCert.id}
                   </span>
                 </p>
+                {qrSignature && (
+                  <p className="text-sm text-blue-800 mt-3">
+                    <strong>✍️ URL Validasi Tanda Tangan:</strong><br />
+                    <span className="font-mono text-xs break-all">
+                      {process.env.NEXT_PUBLIC_APP_URL}/verifikasi/tanda-tangan/[signer_id]
+                    </span>
+                  </p>
+                )}
               </div>
 
-              <div className="flex space-x-3">
+              <div className="flex justify-end">
                 <button
-                  onClick={downloadQR}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-[#047fa7] to-[#0694c4] text-white font-semibold rounded-lg hover:shadow-lg transition-all"
-                >
-                  💾 Download QR
-                </button>
-                <button
-                  onClick={() => { setQrCode(null); setSelectedCert(null); }}
-                  className="px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all"
+                  onClick={() => { setQrCode(null); setQrSignature(null); setSelectedCert(null); }}
+                  className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all"
                 >
                   Tutup
                 </button>

@@ -57,7 +57,7 @@ export default async function SignatureVerifyPage({ params }: PageProps) {
         {/* Title */}
         <div className="text-center mb-8">
           <h3 className="text-lg font-bold text-gray-700 uppercase tracking-wide">
-            Penandatanganan Pelatihan Tata Lingkungan
+            Penandatanganan Pelatihan Pelaksana Pekerjaan Juru Bor Air Tanah
           </h3>
         </div>
 

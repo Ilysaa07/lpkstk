@@ -23,8 +23,8 @@ export default function AdminLayout({
   }
 
   const navItems = [
+    { href: '/', label: 'Beranda', icon: '🏠' },
     { href: '/admin/certificates', label: 'Sertifikat', icon: '📜' },
-    { href: '/admin/signers', label: 'Penandatangan', icon: '✍️' },
   ]
 
   return (
