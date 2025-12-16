@@ -25,6 +25,13 @@ export default async function SignatureVerifyPage({ params }: PageProps) {
     return <InvalidSignature message="Tanda tangan tidak aktif atau telah dicabut" />
   }
 
+  // Fetch certificate to get the date
+  const { data: certificate } = await supabase
+    .from('certificates')
+    .select('tanggal_ditetapkan')
+    .eq('signer_id', id)
+    .single()
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
       day: '2-digit',
@@ -32,6 +39,11 @@ export default async function SignatureVerifyPage({ params }: PageProps) {
       year: 'numeric',
     })
   }
+
+  // Use certificate date if available, otherwise fallback to signer created_at
+  const displayDate = certificate?.tanggal_ditetapkan 
+    ? formatDate(certificate.tanggal_ditetapkan)
+    : formatDate(signer.created_at)
 
   return (
     <div className="min-h-screen bg-white py-8 px-4">
@@ -64,11 +76,17 @@ export default async function SignatureVerifyPage({ params }: PageProps) {
         {/* Signer Information */}
         <div className="mb-8 space-y-4">
           <div className="flex">
-            <span className="font-semibold text-gray-700 w-32">Nama:</span>
+            <div className="w-36 flex justify-between pr-2">
+              <span className="font-semibold text-gray-700">Nama</span>
+              <span className="font-semibold text-gray-700">:</span>
+            </div>
             <span className="text-gray-700">{signer.nama_lengkap}</span>
           </div>
           <div className="flex">
-            <span className="font-semibold text-gray-700 w-32">No Kegiatan:</span>
+            <div className="w-36 flex justify-between pr-2">
+              <span className="font-semibold text-gray-700">No Sertifikat</span>
+              <span className="font-semibold text-gray-700">:</span>
+            </div>
             <span className="text-blue-600">{signer.no_kegiatan}</span>
           </div>
         </div>
@@ -77,7 +95,7 @@ export default async function SignatureVerifyPage({ params }: PageProps) {
         <div className="mb-8">
           <p className="text-gray-600 text-sm leading-relaxed text-justify">
             Dokumen ini sah, dan telah disetujui (ditandatangani secara elektronik) oleh <strong>{signer.nama_lengkap}</strong> selaku 
-            <strong> Ketua_LPK</strong> pada tanggal <strong>{formatDate(signer.created_at)}</strong>, 
+            <strong> Ketua LPK</strong> pada tanggal <strong>{displayDate}</strong>, 
             dan tercatat dalam database.
           </p>
         </div>
